@@ -1,0 +1,96 @@
+Parameters:
+  NameOfService:
+    Description: "The name of the service thyis stack is to be used for."
+    Type: String
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - m1.small
+      - m1.large
+    Description: Enter t2.micro, m1.small, or m1.large. Default is t2.micro.
+  KeyName:
+    Description: Name of EC2 login key
+    Type: AWS::EC2::KeyPair::KeyName
+Mappings: 
+  AMIRegionMap: 
+    us-east-1: 
+      AMI: "ami-0f34c5ae932e6f0e4"
+    us-east-2: 
+      AMI: "ami-02a89066c48741345"
+    us-west-1: 
+      AMI: "ami-0c38b9e37c107d921"
+Resources:
+  WebServer:
+    Type: AWS::EC2::Instance
+    Metadata:
+      AWS::CloudFormation::Init: 
+        config:
+          packages:
+            yum:
+              php: []
+              httpd: []
+              wget: []
+              unzip: []
+              git: []
+          commands:
+            test:
+              command: "wget https://templatemo.com/tm-zip-files-2020/templatemo_520_highway.zip && unzip templatemo_520_highway.zip && cp -r templatemo_520_highway/* /var/www/html"
+          files:
+            /var/www/html/hello.html:
+              content: !Sub |
+                <!Doctype html>
+                <html>
+                <body>
+
+                <h1>Welcome to CloudFormation.</h1>
+                <p>This site is deployed by CloudFormation</p>
+
+                </body>
+                </html>
+          services:
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true 
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !FindInMap
+        - AMIRegionMap
+        - !Ref AWS::Region
+        - AMI
+      Tags:
+        - Key: "Name"
+          Value: !Join ["-", [my, inst, from, cloudformation]]
+      SecurityGroups:
+        - !Ref VprofileSG
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            # Ensure AWS CFN Bootstrap is the latest
+            yum update -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${!AWS::StackName} --resource WebServer --region ${!AWS::Region
+            /opt/aws/bin/cfn-signal -e $? --stack ${!AWS::StackName} --resource WebServer --region ${!AWS::Region
+  VprofileSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh and  http from MyIP
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  DNS:
+    Value: !GetAtt
+      - WebServer
+      - PublicDnsName
